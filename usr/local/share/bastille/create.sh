@@ -481,12 +481,18 @@ create_jail() {
         fi
     ## Using templating function to fetch necessary packges @hackacad
     elif [ -n "${LINUX_JAIL}" ]; then
-        info "Fetching packages..."
-        jexec -l "${NAME}" /bin/bash -c "DEBIAN_FRONTEND=noninteractive rm /var/cache/apt/archives/rsyslog*.deb"
-        jexec -l "${NAME}" /bin/bash -c "DEBIAN_FRONTEND=noninteractive dpkg --force-depends --force-confdef --force-confold -i /var/cache/apt/archives/*.deb"
-        jexec -l "${NAME}" /bin/bash -c "DEBIAN_FRONTEND=noninteractive dpkg --force-depends --force-confdef --force-confold -i /var/cache/apt/archives/*.deb"
-        jexec -l "${NAME}" /bin/bash -c "chmod 777 /tmp"
-        jexec -l "${NAME}" /bin/bash -c "apt update"
+        if [ "${RELEASE}" = "Alpine" ]; then
+            info "Initialising..."
+            cp "${bastille_resolv_conf}" "${bastille_jail_path}"/etc/
+            jexec -l "${NAME}" /bin/sh -c "apk update"
+        else
+            info "Fetching packages..."
+            jexec -l "${NAME}" /bin/bash -c "DEBIAN_FRONTEND=noninteractive rm /var/cache/apt/archives/rsyslog*.deb"
+            jexec -l "${NAME}" /bin/bash -c "DEBIAN_FRONTEND=noninteractive dpkg --force-depends --force-confdef --force-confold -i /var/cache/apt/archives/*.deb"
+            jexec -l "${NAME}" /bin/bash -c "DEBIAN_FRONTEND=noninteractive dpkg --force-depends --force-confdef --force-confold -i /var/cache/apt/archives/*.deb"
+            jexec -l "${NAME}" /bin/bash -c "chmod 777 /tmp"
+            jexec -l "${NAME}" /bin/bash -c "apt update"
+        fi
     else
         # Thin jail.
         if [ -n "${bastille_template_thin}" ]; then
@@ -593,6 +599,10 @@ if [ -n "${LINUX_JAIL}" ]; then
         ## check for FreeBSD releases name
         NAME_VERIFY=ubuntu_focal
         ;;
+    alpine)
+        ## check for FreeBSD releases name
+        NAME_VERIFY=alpine
+        ;;
     *)
         error_notify "Unknown Linux."
         usage
@@ -649,6 +659,10 @@ if [ -z "${EMPTY_JAIL}" ]; then
         ;;
     ubuntu_focal|focal|ubuntu-focal)
         NAME_VERIFY=Ubuntu_2004
+        validate_release
+        ;;
+    alpine)
+        NAME_VERIFY=Alpine
         validate_release
         ;;
     *)

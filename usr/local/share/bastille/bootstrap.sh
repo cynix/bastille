@@ -504,6 +504,56 @@ ubuntu_focal|focal|ubuntu-focal)
         esac
     fi
     ;;
+alpine)
+    if [ ! "$(sysrc -f /boot/loader.conf -n linprocfs_load)" = "YES" ] && [ ! "$(sysrc -f /boot/loader.conf -n linsysfs_load)" = "YES" ] && [ ! "$(sysrc -f /boot/loader.conf -n tmpfs_load)" = "YES" ]; then
+        warn "linprocfs_load, linsysfs_load, tmpfs_load not enabled in /boot/loader.conf or linux_enable not active. Should I do that for you?  (N|y)"
+        read  answer
+        case $answer in
+            [Nn][Oo]|[Nn]|"")
+                error_exit "Exiting."
+                ;;
+            [Yy][Ee][Ss]|[Yy])
+                info "Loading modules"
+                kldload linux linux64 linprocfs linsysfs tmpfs
+                info "Persisting modules"
+                sysrc linux_enable=YES
+                sysrc -f /boot/loader.conf linprocfs_load=YES
+                sysrc -f /boot/loader.conf linsysfs_load=YES
+                sysrc -f /boot/loader.conf tmpfs_load=YES
+                ;;
+        esac
+    fi
+
+    # Manual bootstrap, see https://wiki.alpinelinux.org/wiki/Alpine_Linux_in_a_chroot
+    : ${ALPINE_REPO:=https://dl-cdn.alpinelinux.org/alpine/latest-stable/main}
+    : ${ALPINE_ARCH:=x86_64}
+    ALPINE_ROOT="${bastille_releasesdir}/Alpine"
+    APK_TOOLS=$(fetch -o- "${ALPINE_REPO}/${ALPINE_ARCH}/" | grep apk-tools-static | head -n1 | cut -d'"' -f2)
+
+    if [ -z "${APK_TOOLS}" ]; then
+        error_exit "apk-tools-static not found in ${ALPINE_REPO}/${ALPINE_ARCH}/"
+    fi
+
+    info "Installing alpine-base from ${ALPINE_REPO}/${ALPINE_ARCH}/ ..."
+
+    mkdir -p "${ALPINE_ROOT}/dev"
+    mount -t devfs devfs "${ALPINE_ROOT}/dev"
+
+    mkdir -p "${ALPINE_ROOT}/bootstrap"
+    fetch -o "${ALPINE_ROOT}/bootstrap/${APK_TOOLS}" "${ALPINE_REPO}/${ALPINE_ARCH}/${APK_TOOLS}"
+    tar -C "${ALPINE_ROOT}/bootstrap" -xf "${ALPINE_ROOT}/bootstrap/${APK_TOOLS}"
+    "${ALPINE_ROOT}/bootstrap/sbin/apk.static" add --root "${ALPINE_ROOT}" --repository "${ALPINE_REPO}" --allow-untrusted --arch "${ALPINE_ARCH}" --no-cache --initdb alpine-base
+    rm -r "${ALPINE_ROOT}/bootstrap"
+
+    mkdir -p "${ALPINE_ROOT}/etc/apk"
+    echo "${ALPINE_REPO}" > "${ALPINE_ROOT}/etc/apk/repositories"
+
+    for i in dev proc; do
+        if mount | grep -q "${ALPINE_ROOT}/$i"; then
+            umount "${ALPINE_ROOT}/$i";
+        fi
+    done
+    ;;
 *)
     usage
     ;;
